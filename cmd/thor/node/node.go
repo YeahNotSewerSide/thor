@@ -399,6 +399,9 @@ func (n *Node) processBlock(newBlock *block.Block, stats *blockStats) (bool, err
 		metricBlockProcessedTxs().SetWithLabel(int64(len(receipts)), map[string]string{"type": "received"})
 		metricBlockProcessedGas().SetWithLabel(int64(newBlock.Header().GasUsed()), map[string]string{"type": "received"})
 		metricBlockProcessedDuration().Observe(time.Duration(realElapsed).Milliseconds())
+		if becomeNewBest {
+			metricSlots().Add(int64(newBlock.Header().Timestamp()-oldBest.Header.Timestamp()) / 10)
+		}
 		return nil
 	}); err != nil {
 		switch {
