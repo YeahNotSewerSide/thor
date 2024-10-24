@@ -11,8 +11,9 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"time"
 
-	sqlite3 "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 	"github.com/vechain/thor/v2/block"
 	"github.com/vechain/thor/v2/thor"
 	"github.com/vechain/thor/v2/tx"
@@ -229,10 +230,12 @@ FROM (%v) t
 }
 
 func (db *LogDB) queryEvents(ctx context.Context, query string, args ...interface{}) ([]*Event, error) {
+	start := time.Now()
 	rows, err := db.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
+	metricEventsQuery().Observe(time.Since(start).Nanoseconds())
 	defer func() { _ = rows.Close() }()
 
 	var events []*Event
@@ -296,10 +299,12 @@ func (db *LogDB) queryEvents(ctx context.Context, query string, args ...interfac
 }
 
 func (db *LogDB) queryTransfers(ctx context.Context, query string, args ...interface{}) ([]*Transfer, error) {
+	start := time.Now()
 	rows, err := db.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
+	metricTransfersQuery().Observe(time.Since(start).Nanoseconds())
 	defer func() { _ = rows.Close() }()
 	var transfers []*Transfer
 	for rows.Next() {
@@ -426,6 +431,10 @@ func (w *Writer) Truncate(blockNum uint32) error {
 
 // Write writes all logs of the given block.
 func (w *Writer) Write(b *block.Block, receipts tx.Receipts) error {
+	start := time.Now()
+	defer func() {
+		metricProcessBlockDuration().Observe(time.Since(start).Nanoseconds())
+	}()
 	var (
 		blockID        = b.Header().ID()
 		blockNum       = b.Header().Number()
@@ -554,6 +563,10 @@ func (w *Writer) Write(b *block.Block, receipts tx.Receipts) error {
 			}
 		}
 	}
+
+	metricProcessedEventsCount().Set(int64(eventCount))
+	metricProcesesdTransferCount().Set(int64(transferCount))
+
 	return nil
 }
 
