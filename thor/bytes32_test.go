@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMarshalUnmarshal(t *testing.T) {
+func TestBytes32_UnmarshalJSON(t *testing.T) {
 	// Example hex string representing the value 100
 	originalHex := `"0x00000000000000000000000000000000000000000000000000006d6173746572"` // Note the enclosing double quotes for valid JSON string
 
@@ -49,4 +49,13 @@ func TestMarshalUnmarshal(t *testing.T) {
 	j, err := b.MarshalJSON()
 	assert.NoError(t, err, "Marshaling should not produce an error")
 	assert.Equal(t, `"0x0000000000000000000000000000000000000000000000000000000000000000"`, string(j))
+}
+
+func TestParseBytes32(t *testing.T) {
+	// Example hex string representing the value 100
+	expected := MustParseBytes32("0x0000000000000000000000006d95e6dca01d109882fe1726a2fb9865fa41e7aa")
+	trimmed := "0x6d95e6dca01d109882fe1726a2fb9865fa41e7aa"
+	parsed, err := ParseBytes32(trimmed)
+	assert.NoError(t, err)
+	assert.Equal(t, expected, parsed)
 }

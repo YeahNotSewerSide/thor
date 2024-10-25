@@ -8,7 +8,6 @@ package thor
 import (
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -65,14 +64,14 @@ func (b *Bytes32) UnmarshalJSON(data []byte) error {
 
 // ParseBytes32 convert string presented into Bytes32 type
 func ParseBytes32(s string) (Bytes32, error) {
-	if len(s) == 32*2 {
-	} else if len(s) == 32*2+2 {
-		if strings.ToLower(s[:2]) != "0x" {
-			return Bytes32{}, errors.New("invalid prefix")
-		}
-		s = s[2:]
-	} else {
-		return Bytes32{}, errors.New("invalid length")
+	s = strings.TrimPrefix(s, "0x")
+	// if the string is too long, return error
+	if len(s) > 32*2 {
+		return Bytes32{}, fmt.Errorf("invalid length %d", len(s))
+	}
+	// if the string is too short, add padding
+	if len(s) < 32*2 {
+		s = strings.Repeat("0", 32*2-len(s)) + s
 	}
 
 	var b Bytes32
