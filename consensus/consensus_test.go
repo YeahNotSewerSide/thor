@@ -701,7 +701,6 @@ func TestValidateBlockBody(t *testing.T) {
 		},
 		{
 			"ZeroGasTx", func(t *testing.T) {
-
 				txBuilder := new(tx.Builder).
 					GasPriceCoef(0).
 					Gas(0).
