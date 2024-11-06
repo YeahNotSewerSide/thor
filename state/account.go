@@ -44,7 +44,7 @@ func (a *Account) IsEmpty() bool {
 var bigE18 = big.NewInt(1e18)
 
 // CalcEnergy calculates energy based on current block time.
-func (a *Account) CalcEnergy(blockTime uint64) *big.Int {
+func (a *Account) CalcEnergy(blockTime uint64, energyGrowthRate *big.Int) *big.Int {
 	if a.BlockTime == 0 {
 		return a.Energy
 	}
@@ -59,7 +59,7 @@ func (a *Account) CalcEnergy(blockTime uint64) *big.Int {
 
 	x := new(big.Int).SetUint64(blockTime - a.BlockTime)
 	x.Mul(x, a.Balance)
-	x.Mul(x, thor.EnergyGrowthRate)
+	x.Mul(x, energyGrowthRate)
 	x.Div(x, bigE18)
 	return new(big.Int).Add(a.Energy, x)
 }

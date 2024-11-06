@@ -251,6 +251,22 @@ func (a *Authority) AllCandidates() ([]*Candidate, error) {
 	return candidates, nil
 }
 
+func (a *Authority) GetEnergyGrowthRate(addr thor.Address) (*big.Int, error) {
+	candidates, err := a.AllCandidates()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, candidate := range candidates {
+		candidateAddress := thor.BytesToAddress(candidate.Identity.Bytes()).String()
+		if candidateAddress == addr.String() {
+			return thor.ValidatorEnergyGrowthRate, nil
+		}
+	}
+
+	return thor.EnergyGrowthRate, nil
+}
+
 // First returns node master address of first entry.
 func (a *Authority) First() (*thor.Address, error) {
 	return a.getAddressPtr(headKey)

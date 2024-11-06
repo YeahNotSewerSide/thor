@@ -107,7 +107,7 @@ func init() {
 		}},
 		{"native_totalSupply", func(env *xenv.Environment) []interface{} {
 			env.UseGas(thor.SloadGas)
-			output, err := Energy.Native(env.State(), env.BlockContext().Time).TokenTotalSupply()
+			output, err := Energy.Native(env.State(), env.BlockContext().Time, Authority.Native(env.State())).TokenTotalSupply()
 			if err != nil {
 				panic(err)
 			}

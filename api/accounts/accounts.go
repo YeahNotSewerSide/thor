@@ -18,6 +18,7 @@ import (
 	"github.com/vechain/thor/v2/api/utils"
 	"github.com/vechain/thor/v2/bft"
 	"github.com/vechain/thor/v2/block"
+	"github.com/vechain/thor/v2/builtin"
 	"github.com/vechain/thor/v2/chain"
 	"github.com/vechain/thor/v2/runtime"
 	"github.com/vechain/thor/v2/state"
@@ -93,7 +94,11 @@ func (a *Accounts) getAccount(addr thor.Address, header *block.Header, state *st
 	if err != nil {
 		return nil, err
 	}
-	energy, err := state.GetEnergy(addr, header.Timestamp())
+
+	authorityContract := builtin.Authority.Native(state)
+	energyGrowthRate, err := authorityContract.GetEnergyGrowthRate(addr)
+
+	energy, err := state.GetEnergy(addr, header.Timestamp(), energyGrowthRate)
 	if err != nil {
 		return nil, err
 	}

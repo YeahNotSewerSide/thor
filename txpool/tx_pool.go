@@ -257,8 +257,16 @@ func (p *TxPool) add(newTx *tx.Transaction, rejectNonExecutable bool, localSubmi
 
 		txObj.executable = executable
 		if err := p.all.Add(txObj, p.options.LimitPerAccount, func(payer thor.Address, needs *big.Int) error {
+
+			authorityContract := builtin.Authority.Native(state)
+			energyGrowthRate, err := authorityContract.GetEnergyGrowthRate(payer)
+
+			if err != nil {
+				return err
+			}
+
 			// check payer's balance
-			balance, err := state.GetEnergy(payer, headSummary.Header.Timestamp()+thor.BlockInterval)
+			balance, err := state.GetEnergy(payer, headSummary.Header.Timestamp()+thor.BlockInterval, energyGrowthRate)
 			if err != nil {
 				return err
 			}

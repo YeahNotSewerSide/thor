@@ -105,7 +105,7 @@ func (r *ResolvedTransaction) BuyGas(state *state.State, blockTime uint64) (
 	}
 	gasPrice = r.tx.GasPrice(baseGasPrice)
 
-	energy := builtin.Energy.Native(state, blockTime)
+	energy := builtin.Energy.Native(state, blockTime, builtin.Authority.Native(state))
 	doReturnGas := func(rgas uint64) (*big.Int, error) {
 		returnedEnergy := new(big.Int).Mul(new(big.Int).SetUint64(rgas), gasPrice)
 		if err := energy.Add(payer, returnedEnergy); err != nil {

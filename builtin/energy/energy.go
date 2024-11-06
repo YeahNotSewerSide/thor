@@ -9,6 +9,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/vechain/thor/v2/builtin/authority"
 	"github.com/vechain/thor/v2/state"
 	"github.com/vechain/thor/v2/thor"
 )
@@ -20,14 +21,15 @@ var (
 
 // Energy implements energy operations.
 type Energy struct {
-	addr      thor.Address
-	state     *state.State
-	blockTime uint64
+	addr              thor.Address
+	state             *state.State
+	blockTime         uint64
+	authorityContract *authority.Authority
 }
 
 // New creates a new energy instance.
-func New(addr thor.Address, state *state.State, blockTime uint64) *Energy {
-	return &Energy{addr, state, blockTime}
+func New(addr thor.Address, state *state.State, blockTime uint64, authorityContract *authority.Authority) *Energy {
+	return &Energy{addr, state, blockTime, authorityContract}
 }
 
 func (e *Energy) getInitialSupply() (init initialSupply, err error) {
@@ -89,7 +91,7 @@ func (e *Energy) TotalSupply() (*big.Int, error) {
 		Balance:   initialSupply.Token,
 		Energy:    initialSupply.Energy,
 		BlockTime: initialSupply.BlockTime}
-	return acc.CalcEnergy(e.blockTime), nil
+	return acc.CalcEnergy(e.blockTime, thor.EnergyGrowthRate), nil
 }
 
 // TotalBurned returns energy totally burned.
@@ -103,7 +105,14 @@ func (e *Energy) TotalBurned() (*big.Int, error) {
 
 // Get returns energy of an account at given block time.
 func (e *Energy) Get(addr thor.Address) (*big.Int, error) {
-	return e.state.GetEnergy(addr, e.blockTime)
+	// authorityContract := builtin.Authority.Native(e.state)
+	energyGrowthRate, err := e.authorityContract.GetEnergyGrowthRate(addr)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return e.state.GetEnergy(addr, e.blockTime, energyGrowthRate)
 }
 
 // Add add amount of energy to given address.
@@ -111,7 +120,14 @@ func (e *Energy) Add(addr thor.Address, amount *big.Int) error {
 	if amount.Sign() == 0 {
 		return nil
 	}
-	eng, err := e.state.GetEnergy(addr, e.blockTime)
+	// authorityContract := builtin.Authority.Native(e.state)
+	energyGrowthRate, err := e.authorityContract.GetEnergyGrowthRate(addr)
+
+	if err != nil {
+		return err
+	}
+
+	eng, err := e.state.GetEnergy(addr, e.blockTime, energyGrowthRate)
 	if err != nil {
 		return err
 	}
@@ -134,7 +150,15 @@ func (e *Energy) Sub(addr thor.Address, amount *big.Int) (bool, error) {
 	if amount.Sign() == 0 {
 		return true, nil
 	}
-	eng, err := e.state.GetEnergy(addr, e.blockTime)
+
+	// authorityContract := builtin.Authority.Native(e.state)
+	energyGrowthRate, err := e.authorityContract.GetEnergyGrowthRate(addr)
+
+	if err != nil {
+		return false, err
+	}
+
+	eng, err := e.state.GetEnergy(addr, e.blockTime, energyGrowthRate)
 	if err != nil {
 		return false, err
 	}

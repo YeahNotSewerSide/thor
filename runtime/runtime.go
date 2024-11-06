@@ -157,11 +157,19 @@ func (rt *Runtime) newEVM(stateDB *statedb.StateDB, clauseIndex uint32, txCtx *x
 			}
 			// touch energy balance when token balance changed
 			// SHOULD be performed before transfer
-			senderEnergy, err := rt.state.GetEnergy(thor.Address(sender), rt.ctx.Time)
+
+			authorityContract := builtin.Authority.Native(rt.state)
+			energyGrowthRate, err := authorityContract.GetEnergyGrowthRate(thor.Address(sender))
+
+			if err != nil {
+				return
+			}
+
+			senderEnergy, err := rt.state.GetEnergy(thor.Address(sender), rt.ctx.Time, energyGrowthRate)
 			if err != nil {
 				panic(err)
 			}
-			recipientEnergy, err := rt.state.GetEnergy(thor.Address(recipient), rt.ctx.Time)
+			recipientEnergy, err := rt.state.GetEnergy(thor.Address(recipient), rt.ctx.Time, energyGrowthRate)
 			if err != nil {
 				panic(err)
 			}
@@ -248,15 +256,22 @@ func (rt *Runtime) newEVM(stateDB *statedb.StateDB, clauseIndex uint32, txCtx *x
 			})
 		},
 		OnSuicideContract: func(_ *vm.EVM, contractAddr, tokenReceiver common.Address) {
+
+			authorityContract := builtin.Authority.Native(rt.state)
+			energyGrowthRate, err := authorityContract.GetEnergyGrowthRate(thor.Address(contractAddr))
+
 			// it's IMPORTANT to process energy before token
-			amount, err := rt.state.GetEnergy(thor.Address(contractAddr), rt.ctx.Time)
+			amount, err := rt.state.GetEnergy(thor.Address(contractAddr), rt.ctx.Time, energyGrowthRate)
 			if err != nil {
 				panic(err)
 			}
 			if amount.Sign() != 0 {
 				// add remained energy of suiciding contract to receiver.
 				// no need to clear contract's energy, vm will delete the whole contract later.
-				receiverEnergy, err := rt.state.GetEnergy(thor.Address(tokenReceiver), rt.ctx.Time)
+				authorityContract := builtin.Authority.Native(rt.state)
+				energyGrowthRate, err := authorityContract.GetEnergyGrowthRate(thor.Address(tokenReceiver))
+
+				receiverEnergy, err := rt.state.GetEnergy(thor.Address(tokenReceiver), rt.ctx.Time, energyGrowthRate)
 				if err != nil {
 					panic(err)
 				}
@@ -486,7 +501,7 @@ func (rt *Runtime) PrepareTransaction(tx *tx.Transaction) (*TransactionExecutor,
 			reward.Mul(reward, overallGasPrice)
 			reward.Mul(reward, rewardRatio)
 			reward.Div(reward, big.NewInt(1e18))
-			if err := builtin.Energy.Native(rt.state, rt.ctx.Time).Add(rt.ctx.Beneficiary, reward); err != nil {
+			if err := builtin.Energy.Native(rt.state, rt.ctx.Time, builtin.Authority.Native(rt.state)).Add(rt.ctx.Beneficiary, reward); err != nil {
 				return nil, err
 			}
 

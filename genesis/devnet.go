@@ -97,7 +97,7 @@ func NewDevnet() *Genesis {
 				tokenSupply.Add(tokenSupply, bal)
 				energySupply.Add(energySupply, bal)
 			}
-			return builtin.Energy.Native(state, launchTime).SetInitialSupply(tokenSupply, energySupply)
+			return builtin.Energy.Native(state, launchTime, builtin.Authority.Native(state)).SetInitialSupply(tokenSupply, energySupply)
 		}).
 		Call(
 			tx.NewClause(&builtin.Params.Address).WithData(mustEncodeInput(builtin.Params.ABI, "set", thor.KeyExecutorAddress, new(big.Int).SetBytes(executor[:]))),

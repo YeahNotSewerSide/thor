@@ -113,7 +113,7 @@ func NewCustomNet(gen *CustomGenesis) (*Genesis, error) {
 				}
 			}
 
-			return builtin.Energy.Native(state, launchTime).SetInitialSupply(tokenSupply, energySupply)
+			return builtin.Energy.Native(state, launchTime, builtin.Authority.Native(state)).SetInitialSupply(tokenSupply, energySupply)
 		})
 
 	///// initialize builtin contracts
