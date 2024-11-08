@@ -7,7 +7,6 @@ package blocks_test
 
 import (
 	"encoding/json"
-	"io"
 	"math"
 	"math/big"
 	"net/http"
@@ -15,33 +14,35 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vechain/thor/v2/api/blocks"
 	"github.com/vechain/thor/v2/block"
-	"github.com/vechain/thor/v2/chain"
-	"github.com/vechain/thor/v2/cmd/thor/solo"
 	"github.com/vechain/thor/v2/genesis"
-	"github.com/vechain/thor/v2/muxdb"
-	"github.com/vechain/thor/v2/packer"
-	"github.com/vechain/thor/v2/state"
+	"github.com/vechain/thor/v2/test/testchain"
 	"github.com/vechain/thor/v2/thor"
+	"github.com/vechain/thor/v2/thorclient"
 	"github.com/vechain/thor/v2/tx"
 )
 
-var genesisBlock *block.Block
-var blk *block.Block
-var ts *httptest.Server
+const (
+	invalidBytes32 = "0x000000000000000000000000000000000000000000000000000000000000000g" // invalid bytes32
+)
 
-var invalidBytes32 = "0x000000000000000000000000000000000000000000000000000000000000000g" //invlaid bytes32
+var (
+	genesisBlock *block.Block
+	blk          *block.Block
+	ts           *httptest.Server
+	tclient      *thorclient.Client
+)
 
 func TestBlock(t *testing.T) {
 	initBlockServer(t)
 	defer ts.Close()
 
+	tclient = thorclient.New(ts.URL)
 	for name, tt := range map[string]func(*testing.T){
 		"testBadQueryParams":                    testBadQueryParams,
 		"testInvalidBlockID":                    testInvalidBlockID,
@@ -61,14 +62,16 @@ func TestBlock(t *testing.T) {
 
 func testBadQueryParams(t *testing.T) {
 	badQueryParams := "?expanded=1"
-	res, statusCode := httpGet(t, ts.URL+"/blocks/best"+badQueryParams)
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/best" + badQueryParams)
+	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusBadRequest, statusCode)
 	assert.Equal(t, "expanded: should be boolean", strings.TrimSpace(string(res)))
 }
 
 func testGetBestBlock(t *testing.T) {
-	res, statusCode := httpGet(t, ts.URL+"/blocks/best")
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/best")
+	require.NoError(t, err)
 	rb := new(blocks.JSONCollapsedBlock)
 	if err := json.Unmarshal(res, &rb); err != nil {
 		t.Fatal(err)
@@ -78,7 +81,8 @@ func testGetBestBlock(t *testing.T) {
 }
 
 func testGetBlockByHeight(t *testing.T) {
-	res, statusCode := httpGet(t, ts.URL+"/blocks/1")
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/1")
+	require.NoError(t, err)
 	rb := new(blocks.JSONCollapsedBlock)
 	if err := json.Unmarshal(res, &rb); err != nil {
 		t.Fatal(err)
@@ -88,7 +92,8 @@ func testGetBlockByHeight(t *testing.T) {
 }
 
 func testGetFinalizedBlock(t *testing.T) {
-	res, statusCode := httpGet(t, ts.URL+"/blocks/finalized")
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/finalized")
+	require.NoError(t, err)
 	finalized := new(blocks.JSONCollapsedBlock)
 	if err := json.Unmarshal(res, &finalized); err != nil {
 		t.Fatal(err)
@@ -101,7 +106,8 @@ func testGetFinalizedBlock(t *testing.T) {
 }
 
 func testGetJustifiedBlock(t *testing.T) {
-	res, statusCode := httpGet(t, ts.URL+"/blocks/justified")
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/justified")
+	require.NoError(t, err)
 	justified := new(blocks.JSONCollapsedBlock)
 	require.NoError(t, json.Unmarshal(res, &justified))
 
@@ -111,7 +117,8 @@ func testGetJustifiedBlock(t *testing.T) {
 }
 
 func testGetBlockByID(t *testing.T) {
-	res, statusCode := httpGet(t, ts.URL+"/blocks/"+blk.Header().ID().String())
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/" + blk.Header().ID().String())
+	require.NoError(t, err)
 	rb := new(blocks.JSONCollapsedBlock)
 	if err := json.Unmarshal(res, rb); err != nil {
 		t.Fatal(err)
@@ -121,14 +128,17 @@ func testGetBlockByID(t *testing.T) {
 }
 
 func testGetBlockNotFound(t *testing.T) {
-	res, statusCode := httpGet(t, ts.URL+"/blocks/0x00000000851caf3cfdb6e899cf5958bfb1ac3413d346d43539627e6be7ec1b4a")
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/0x00000000851caf3cfdb6e899cf5958bfb1ac3413d346d43539627e6be7ec1b4a")
+	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, statusCode)
 	assert.Equal(t, "null", strings.TrimSpace(string(res)))
 }
 
 func testGetExpandedBlockByID(t *testing.T) {
-	res, statusCode := httpGet(t, ts.URL+"/blocks/"+blk.Header().ID().String()+"?expanded=true")
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/" + blk.Header().ID().String() + "?expanded=true")
+	require.NoError(t, err)
+
 	rb := new(blocks.JSONExpandedBlock)
 	if err := json.Unmarshal(res, rb); err != nil {
 		t.Fatal(err)
@@ -139,40 +149,35 @@ func testGetExpandedBlockByID(t *testing.T) {
 
 func testInvalidBlockNumber(t *testing.T) {
 	invalidNumberRevision := "4294967296" //invalid block number
-	_, statusCode := httpGet(t, ts.URL+"/blocks/"+invalidNumberRevision)
+	_, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/" + invalidNumberRevision)
+	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, statusCode)
 }
 
 func testInvalidBlockID(t *testing.T) {
-	_, statusCode := httpGet(t, ts.URL+"/blocks/"+invalidBytes32)
+	_, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/" + invalidBytes32)
+	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, statusCode)
 }
 
 func testGetBlockWithRevisionNumberTooHigh(t *testing.T) {
 	revisionNumberTooHigh := strconv.FormatUint(math.MaxUint64, 10)
-	res, statusCode := httpGet(t, ts.URL+"/blocks/"+revisionNumberTooHigh)
+	res, statusCode, err := tclient.RawHTTPClient().RawHTTPGet("/blocks/" + revisionNumberTooHigh)
+	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusBadRequest, statusCode)
 	assert.Equal(t, "revision: block number out of max uint32", strings.TrimSpace(string(res)))
 }
 
 func initBlockServer(t *testing.T) {
-	db := muxdb.NewMem()
-	stater := state.NewStater(db)
-	gene := genesis.NewDevnet()
+	thorChain, err := testchain.NewIntegrationTestChain()
+	require.NoError(t, err)
 
-	b, _, _, err := gene.Build(stater)
-	if err != nil {
-		t.Fatal(err)
-	}
-	genesisBlock = b
-
-	repo, _ := chain.NewRepository(db, b)
 	addr := thor.BytesToAddress([]byte("to"))
 	cla := tx.NewClause(&addr).WithValue(big.NewInt(10000))
 	trx := tx.MustSign(
 		new(tx.Builder).
-			ChainTag(repo.ChainTag()).
+			ChainTag(thorChain.Repo().ChainTag()).
 			GasPriceCoef(1).
 			Expiration(10).
 			Gas(21000).
@@ -183,34 +188,17 @@ func initBlockServer(t *testing.T) {
 		genesis.DevAccounts()[0].PrivateKey,
 	)
 
-	packer := packer.New(repo, stater, genesis.DevAccounts()[0].Address, &genesis.DevAccounts()[0].Address, thor.NoFork)
-	sum, _ := repo.GetBlockSummary(b.Header().ID())
-	flow, err := packer.Schedule(sum, uint64(time.Now().Unix()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = flow.Adopt(trx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	block, stage, receipts, err := flow.Pack(genesis.DevAccounts()[0].PrivateKey, 0, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := stage.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.AddBlock(block, receipts, 0); err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.SetBestBlockID(block.Header().ID()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, thorChain.MintTransactions(genesis.DevAccounts()[0], trx))
+
+	allBlocks, err := thorChain.GetAllBlocks()
+	require.NoError(t, err)
+
+	genesisBlock = allBlocks[0]
+	blk = allBlocks[1]
+
 	router := mux.NewRouter()
-	bftEngine := solo.NewBFTEngine(repo)
-	blocks.New(repo, bftEngine).Mount(router, "/blocks")
+	blocks.New(thorChain.Repo(), thorChain.Engine()).Mount(router, "/blocks")
 	ts = httptest.NewServer(router)
-	blk = block
 }
 
 func checkCollapsedBlock(t *testing.T, expBl *block.Block, actBl *blocks.JSONCollapsedBlock) {
@@ -247,17 +235,4 @@ func checkExpandedBlock(t *testing.T, expBl *block.Block, actBl *blocks.JSONExpa
 	for i, tx := range expBl.Transactions() {
 		assert.Equal(t, tx.ID(), actBl.Transactions[i].ID, "txid should be equal")
 	}
-}
-
-func httpGet(t *testing.T, url string) ([]byte, int) {
-	res, err := http.Get(url) //#nosec G107
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return r, res.StatusCode
 }
