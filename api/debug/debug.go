@@ -22,9 +22,11 @@ import (
 	"github.com/vechain/thor/v2/api/utils"
 	"github.com/vechain/thor/v2/bft"
 	"github.com/vechain/thor/v2/block"
+	"github.com/vechain/thor/v2/builtin"
 	"github.com/vechain/thor/v2/chain"
 	"github.com/vechain/thor/v2/consensus"
 	"github.com/vechain/thor/v2/muxdb"
+	"github.com/vechain/thor/v2/poa"
 	"github.com/vechain/thor/v2/runtime"
 	"github.com/vechain/thor/v2/state"
 	"github.com/vechain/thor/v2/thor"
@@ -222,6 +224,69 @@ func (d *Debug) handleTraceCall(w http.ResponseWriter, req *http.Request) error 
 	}
 
 	return utils.WriteJSON(w, res)
+}
+
+func (d *Debug) handleQueryAuthority(w http.ResponseWriter, req *http.Request) error {
+	revision, err := utils.ParseRevision(req.URL.Query().Get("revision"), true)
+	if err != nil {
+		return utils.BadRequest(errors.WithMessage(err, "revision"))
+	}
+	summary, state, err := utils.GetSummaryAndState(revision, d.repo, d.bft, d.stater)
+	if err != nil {
+		if d.repo.IsNotFound(err) {
+			return utils.BadRequest(errors.WithMessage(err, "revision"))
+		}
+		return err
+	}
+
+	authority := builtin.Authority.Native(state)
+	endorsement, err := builtin.Params.Native(state).Get(thor.KeyProposerEndorsement)
+	if err != nil {
+		return err
+	}
+
+	mbp, err := builtin.Params.Native(state).Get(thor.KeyMaxBlockProposers)
+	if err != nil {
+		return err
+	}
+
+	maxBlockProposers := mbp.Uint64()
+	if maxBlockProposers == 0 || maxBlockProposers > thor.InitialMaxBlockProposers {
+		maxBlockProposers = thor.InitialMaxBlockProposers
+	}
+
+	candidates, err := authority.Candidates(endorsement, maxBlockProposers)
+	if err != nil {
+		return err
+	}
+	var (
+		proposers = make([]poa.Proposer, 0, len(candidates))
+	)
+
+	for _, c := range candidates {
+		proposers = append(proposers, poa.Proposer{
+			Address: c.NodeMaster,
+			Active:  c.Active,
+		})
+	}
+
+	seeder := poa.NewSeeder(d.repo)
+	var sched poa.Scheduler
+	if summary.Header.Number()+1 < d.forkConfig.VIP214 {
+		sched, err = poa.NewSchedulerV1(proposers[0].Address, proposers, summary.Header.Number(), summary.Header.Timestamp())
+	} else {
+		var seed []byte
+		seed, err = seeder.Generate(summary.Header.ID())
+		if err != nil {
+			return err
+		}
+		sched, err = poa.NewSchedulerV2(proposers[0].Address, proposers, summary.Header.Number(), summary.Header.Timestamp(), seed)
+	}
+	if err != nil {
+		return err
+	}
+
+	return utils.WriteJSON(w, sched.Proposers())
 }
 
 func (d *Debug) createTracer(name string, config json.RawMessage) (tracers.Tracer, error) {
@@ -476,4 +541,8 @@ func (d *Debug) Mount(root *mux.Router, pathPrefix string) {
 		Methods(http.MethodPost).
 		Name("debug_trace_storage").
 		HandlerFunc(utils.WrapHandlerFunc(d.handleDebugStorage))
+	sub.Path("/proposers").
+		Methods(http.MethodGet).
+		Name("debug_get_proposers").
+		HandlerFunc(utils.WrapHandlerFunc(d.handleQueryAuthority))
 }

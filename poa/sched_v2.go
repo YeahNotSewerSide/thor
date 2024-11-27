@@ -73,11 +73,17 @@ func NewSchedulerV2(
 		shuffled = append(shuffled, t.addr)
 	}
 
+	//log.Warn("ScheduleV2", "shuffled", shuffled)
+
 	return &SchedulerV2{
 		proposer,
 		parentBlockTime,
 		shuffled,
 	}, nil
+}
+
+func (s *SchedulerV2) Proposers() []thor.Address {
+	return s.shuffled
 }
 
 // Schedule to determine time of the proposer to produce a block, according to `nowTime`.

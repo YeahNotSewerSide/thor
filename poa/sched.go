@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 
+	//"github.com/vechain/thor/v2/log"
 	"github.com/vechain/thor/v2/thor"
 )
 
@@ -17,6 +18,7 @@ type Scheduler interface {
 	Schedule(nowTime uint64) (newBlockTime uint64)
 	IsTheTime(newBlockTime uint64) bool
 	Updates(newBlockTime uint64) (updates []Proposer, score uint64)
+	Proposers() []thor.Address
 }
 
 // SchedulerV1 to schedule the time when a proposer to produce a block.
@@ -55,6 +57,8 @@ func NewSchedulerV1(
 		return nil, errors.New("unauthorized block proposer")
 	}
 
+	//log.Warn("ScheduleV1", "addr", addr, "actives", actives)
+
 	return &SchedulerV1{
 		proposer,
 		actives,
@@ -66,6 +70,14 @@ func NewSchedulerV1(
 func (s *SchedulerV1) whoseTurn(t uint64) Proposer {
 	index := dprp(s.parentBlockNumber, t) % uint64(len(s.actives))
 	return s.actives[index]
+}
+
+func (s *SchedulerV1) Proposers() []thor.Address {
+	var proposers = make([]thor.Address, len(s.actives))
+	for index, proposer := range s.actives {
+		proposers[index] = proposer.Address
+	}
+	return proposers
 }
 
 // Schedule to determine time of the proposer to produce a block, according to `nowTime`.
